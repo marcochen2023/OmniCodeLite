@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Omni Code — AI Coding Agent</title>
+<!-- 內嵌 SVG favicon：無外部檔案依賴，深淺色皆可辨識 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238a7cf0'/%3E%3Cstop offset='.55' stop-color='%23b083ea'/%3E%3Cstop offset='1' stop-color='%23ff97c4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M8 11.5l4.5 4.5L8 20.5' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.5 21.5h7.5' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<!-- 主題預先套用（避免載入閃爍） -->
+<script>
+(function () {
+    try {
+        var t = localStorage.getItem('oc_theme');
+        if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t;
+    } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+})();
+</script>
+
+<!-- 語系預先套用（i18n.js 載入前先用 localStorage 頂著，避免閃爍） -->
+<script>
+(function () {
+    try {
+        var l = localStorage.getItem('oc_locale') || 'en';
+        var m = { 'zh-TW': 'zh-Hant', 'zh-CN': 'zh-Hans', en: 'en', ja: 'ja', ko: 'ko' };
+        document.documentElement.lang = m[l] || 'en';
+    } catch (e) { document.documentElement.lang = 'en'; }
+})();
+</script>
+
+<!-- 字型 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- CodeMirror 5 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+
+<!-- highlight.js 主題 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ═══ Aurora 背景 ═══ -->
+<div class="fx" aria-hidden="true">
+    <div class="aurora a1"></div>
+    <div class="aurora a2"></div>
+    <div class="aurora a3"></div>
+    <div class="grain"></div>
+</div>
+
+<!-- ═══ 啟動畫面 ═══ -->
+<div id="splash">
+    <div class="splash-inner">
+        <div class="splash-logo">Omni<span>Code</span></div>
+        <div class="splash-sub">AI coding agent · runs locally</div>
+        <div class="spinner splash-spinner"></div>
+        <div class="splash-status" id="splash-status">Starting…</div>
+    </div>
+</div>
+
+<!-- ═══ 主應用 ═══ -->
+<div id="oc-app">
+
+    <!-- ─── 頂列 ─── -->
+    <header id="oc-top">
+        <div class="oc-brand">
+            <span class="ms oc-brand-mark">terminal</span>
+            <span class="oc-brand-name">Omni<span>Code</span></span>
+        </div>
+
+        <button id="ws-picker" class="top-ws" title="Switch workspace (the Agent’s permission scope)">
+            <span class="ms">folder_open</span>
+            <span id="ws-path" class="ws-path">Loading…</span>
+            <span class="ms ws-caret">expand_more</span>
+        </button>
+        <!-- Chat 模式：通用問答，不綁定工作路徑（modes.js） -->
+        <button id="mode-chat-btn" class="top-pill top-mode-chat" title="Switch to AI chat mode">
+            <span class="ms">forum</span>
+            <span>Chat</span>
+        </button>
+
+        <div class="top-spacer"></div>
+
+        <!-- 內容由 chat.js 的 renderTokenMeter() 產生 -->
+        <div id="token-meter" class="token-meter" title="Context usage"></div>
+
+        <button id="model-btn" class="top-pill" title="Switch model (Alt+M)">
+            <span class="ms">smart_toy</span>
+            <span id="model-label">Loading…</span>
+            <span class="ms pill-caret">expand_more</span>
+        </button>
+
+        <button id="effort-btn" class="top-pill top-effort" title="Effort: reasoning strength">
+            <span class="ms effort-ico">neurology</span>
+            <span id="effort-label">High</span>
+        </button>
+
+        <button id="mode-btn" class="top-pill top-mode" title="Mode: permission mode (Shift+Tab to cycle)">
+            <span class="mode-glyph"></span>
+            <span id="mode-label">Manual</span>
+        </button>
+
+        <button id="keys-btn" class="btn-icon" title="API key settings"><span class="ms">key</span></button>
+        <button id="theme-btn" class="btn-icon ms" title="Toggle theme">light_mode</button>
+        <button id="layout-swap-btn" class="btn-icon" title="Swap layout: chat ⇄ editor"><span class="ms">swap_horiz</span></button>
+        <button id="chat-toggle-btn" class="btn-icon" title="Collapse / expand chat panel"><span class="ms">right_panel_close</span></button>
+    </header>
+
+    <!-- ─── 左側圖示列 ─── -->
+    <nav id="oc-rail">
+        <button class="rail-btn active" data-panel="files"    data-tip="Explorer (Ctrl+B)"><span class="ms">folder</span></button>
+        <button class="rail-btn"        data-panel="search"   data-tip="Global search (Ctrl+Shift+F)"><span class="ms">search</span></button>
+        <button class="rail-btn"        data-panel="sessions" data-tip="Sessions"><span class="ms">history</span></button>
+        <button class="rail-btn"        data-panel="memory"   data-tip="Memory"><span class="ms">psychology</span></button>
+        <button class="rail-btn"        data-panel="skills"   data-tip="Skills"><span class="ms">auto_awesome</span></button>
+        <button class="rail-btn"        data-panel="mcp"      data-tip="MCP servers"><span class="ms">extension</span></button>
+        <button class="rail-btn"        data-panel="models"   data-tip="Models"><span class="ms">tune</span></button>
+        <button class="rail-btn"        data-panel="usage"    data-tip="Token usage"><span class="ms">monitoring</span></button>
+        <div class="rail-spacer"></div>
+        <button id="image-btn" class="rail-btn" data-tip="Image studio"><span class="ms">imagesmode</span></button>
+        <button class="rail-btn"        data-panel="settings" data-tip="Settings"><span class="ms">settings</span></button>
+    </nav>
+
+    <!-- ─── 左側面板 ─── -->
+    <aside id="oc-side">
+        <section id="panel-files" class="oc-panel active">
+            <div class="panel-head">
+                <span class="panel-title">Explorer</span>
+                <div class="panel-acts">
+                    <button class="btn-icon btn-xs ms" id="ft-new-file" title="New file">note_add</button>
+                    <button class="btn-icon btn-xs ms" id="ft-new-dir" title="New folder">create_new_folder</button>
+                    <button class="btn-icon btn-xs ms" id="ft-collapse" title="Collapse all">unfold_less</button>
+                    <button class="btn-icon btn-xs ms" id="ft-refresh" title="Refresh">refresh</button>
+                </div>
+            </div>
+            <div class="panel-body" id="file-tree"></div>
+        </section>
+
+        <section id="panel-self" class="oc-panel"></section>
+
+        <section id="panel-search" class="oc-panel">
+            <div class="panel-head"><span class="panel-title">Search</span></div>
+            <div class="panel-body" id="search-body"></div>
+        </section>
+
+        <section id="panel-sessions" class="oc-panel">
+            <div class="panel-head">
+                <span class="panel-title">Sessions</span>
+                <div class="panel-acts">
+                    <button class="btn-icon btn-xs ms" id="sess-new" title="New chat">add_comment</button>
+                </div>
+            </div>
+            <div class="panel-body" id="sessions-body"></div>
+        </section>
+
+        <section id="panel-memory" class="oc-panel">
+            <div class="panel-head">
+                <span class="panel-title">Memory</span>
+                <div class="panel-acts">
+                    <button class="btn-icon btn-xs ms" id="mem-new" title="Add">add</button>
+                    <button class="btn-icon btn-xs ms" id="mem-refresh" title="Refresh">refresh</button>
+                </div>
+            </div>
+            <div class="panel-body" id="memory-body"></div>
+        </section>
+
+        <section id="panel-skills" class="oc-panel">
+            <div class="panel-head">
+                <span class="panel-title">Skills</span>
+                <div class="panel-acts">
+                    <button class="btn-icon btn-xs ms" id="skill-new" title="Add">add</button>
+                    <button class="btn-icon btn-xs ms" id="skill-refresh" title="Refresh">refresh</button>
+                </div>
+            </div>
+            <div class="panel-body" id="skills-body"></div>
+        </section>
+
+        <section id="panel-mcp" class="oc-panel">
+            <div class="panel-head">
+                <span class="panel-title">MCP servers</span>
+                <div class="panel-acts">
+                    <button class="btn-icon btn-xs ms" id="mcp-add" title="Add">add</button>
+                    <button class="btn-icon btn-xs ms" id="mcp-refresh" title="Reload tools">refresh</button>
+                </div>
+            </div>
+            <div class="panel-body" id="mcp-body"></div>
+        </section>
+
+        <section id="panel-models" class="oc-panel"></section>
+
+        <section id="panel-usage" class="oc-panel"></section>
+
+        <section id="panel-settings" class="oc-panel">
+            <div id="settings-body" style="display:contents"></div>
+        </section>
+    </aside>
+
+    <div class="resizer resizer-side" id="resizer-side"></div>
+
+    <!-- ─── 中央：編輯器 + 下方面板 ─── -->
+    <main id="oc-center">
+        <div id="tab-bar"></div>
+
+        <div id="editor-host">
+            <div class="editor-empty" id="editor-empty">
+                <div class="ee-logo">Omni<span>Code</span></div>
+                <div class="ee-sub">Open a file on the left, or just tell the AI on the right</div>
+                <div class="ee-keys">
+                    <div><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick open file</span></div>
+                    <div><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd><span>Global search</span></div>
+                    <div><kbd>Ctrl</kbd><kbd>`</kbd><span>Terminal</span></div>
+                    <div><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div>
+                    <div><kbd>Shift</kbd><kbd>Tab</kbd><span>Switch permission mode</span></div>
+                    <div><kbd>Ctrl</kbd><kbd>↵</kbd><span>Send message</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dock">
+            <div class="resizer resizer-dock" id="resizer-dock" title="Drag to resize (double-click to collapse / expand)"></div>
+            <div id="dock-tabs">
+                <button class="dock-tab active" data-dock="terminal"><span class="ms">terminal</span> Terminal</button>
+                <button class="dock-tab" data-dock="diff"><span class="ms">difference</span> Changes</button>
+                <button class="dock-tab" data-dock="problems"><span class="ms">error_outline</span> Problems</button>
+                <button class="dock-tab" data-dock="preview"><span class="ms">web</span> Preview</button>
+                <div class="dock-spacer"></div>
+                <button class="btn-icon btn-xs ms" id="dock-toggle" title="Collapse / expand">keyboard_double_arrow_down</button>
+            </div>
+            <div class="dock-views">
+                <div id="dock-terminal" class="dock-view active"></div>
+                <div id="dock-diff" class="dock-view"></div>
+                <div id="dock-problems" class="dock-view">
+                    <div class="dock-empty">No problems detected.<br><span class="dim">Errors from lint / tests will show up here.</span></div>
+                </div>
+                <div id="dock-preview" class="dock-view">
+                    <div class="preview-bar">
+                        <input id="preview-url" class="inp inp-sm" placeholder="http://localhost/app/…">
+                        <button class="btn btn-xs btn-ghost" id="preview-go">Go</button>
+                        <button class="btn-icon btn-xs ms" id="preview-reload" title="Reload">refresh</button>
+                        <button class="btn-icon btn-xs ms" id="preview-ext" title="Open in new tab">open_in_new</button>
+                    </div>
+                    <iframe id="dock-preview-frame" src="about:blank" title="Preview"></iframe>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="resizer resizer-chat" id="resizer-chat"></div>
+
+    <!-- ─── 右側：Agent 對話 ─── -->
+    <section id="oc-chat">
+        <div class="chat-head">
+            <span class="ms chat-head-ico">smart_toy</span>
+            <span id="session-title" class="chat-title">New chat</span>
+            <div class="chat-head-acts">
+                <button class="btn-icon btn-xs ms" id="chat-self" title="Self-improve: improve Omni Code together">self_improvement</button>
+                <button class="btn-icon btn-xs ms" id="chat-new" title="New chat">add_comment</button>
+                <button class="btn-icon btn-xs ms" id="chat-history" title="History">history</button>
+                <button class="btn-icon btn-xs ms" id="chat-compact" title="Compact context">compress</button>
+            </div>
+        </div>
+
+        <div id="chat-scroll"></div>
+        <div id="chat-todo"></div>
+
+        <form id="chat-form" autocomplete="off">
+            <div id="chat-attachments"></div>
+            <div id="chat-extras"></div>
+            <div class="chat-input-row">
+                <button type="button" id="chat-attach" class="btn-icon ms" title="Attach images">add_photo_alternate</button>
+                <button type="button" id="chat-extra" class="btn-icon ms" title="Extra folders">folder_open</button>
+                <textarea id="chat-input" class="ta" rows="1"
+                    placeholder="Give Omni Code a task… (Ctrl+Enter to send, type / for commands)"></textarea>
+                <button type="submit" id="chat-send" class="btn-icon btn-send ms" title="Send (Ctrl+Enter)">arrow_upward</button>
+                <button type="button" id="chat-stop" class="btn-icon btn-stop ms" title="Stop (Esc)" hidden>stop_circle</button>
+            </div>
+            <div class="chat-meta">
+                <span id="chat-status" class="chat-status"></span>
+                <span class="chat-hint dim">Full file permissions inside the workspace</span>
+            </div>
+        </form>
+        <input type="file" id="chat-file-input" accept="image/*" multiple hidden>
+    </section>
+</div>
+
+<!-- ═══ Modal：通用 ═══ -->
+<div id="modal-generic" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-head"><span id="modal-generic-title">Title</span>
+            <button class="modal-x ms" onclick="closeModal('modal-generic')">close</button></div>
+        <div class="modal-body" id="modal-generic-body"></div>
+        <div class="modal-actions" id="modal-generic-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：入口（每次進入詢問用途，modes.js） ═══ -->
+<div id="modal-entry" class="modal-overlay">
+    <div class="modal-box modal-entry">
+        <div class="modal-head"><span><span class="ms">waving_hand</span>What do you want to do with Omni Code today?</span>
+            <button class="modal-x ms" onclick="closeModal('modal-entry')">close</button></div>
+        <div class="modal-body" id="modal-entry-body"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：確認 ═══ -->
+<div id="modal-confirm" class="modal-overlay">
+    <div class="modal-box modal-sm">
+        <div class="modal-head"><span id="modal-confirm-title">Confirm</span></div>
+        <div class="modal-body" id="modal-confirm-body"></div>
+        <div class="modal-actions" id="modal-confirm-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：權限授權 ═══ -->
+<div id="modal-permission" class="modal-overlay">
+    <div class="modal-box modal-perm">
+        <div class="modal-head"><span id="modal-permission-title">Needs your approval</span></div>
+        <div class="modal-body" id="modal-permission-body"></div>
+        <div class="modal-actions" id="modal-permission-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：API Key ═══ -->
+<div id="modal-keys" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-head"><span>API key settings</span>
+            <button class="modal-x ms" onclick="closeModal('modal-keys')">close</button></div>
+        <div class="modal-body" id="modal-keys-body"></div>
+        <div class="modal-actions" id="modal-keys-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：工作區選擇 ═══ -->
+<div id="modal-workspace" class="modal-overlay">
+    <div class="modal-box modal-lg">
+        <div class="modal-head"><span>Pick a workspace</span>
+            <button class="modal-x ms" onclick="closeModal('modal-workspace')">close</button></div>
+        <div class="modal-body" id="modal-workspace-body"></div>
+        <div class="modal-actions" id="modal-workspace-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ Modal：額外工作資料夾 ═══ -->
+<div id="modal-extra" class="modal-overlay">
+    <div class="modal-box modal-lg">
+        <div class="modal-head"><span id="modal-extra-title">Extra folders</span>
+            <button class="modal-x ms" onclick="closeModal('modal-extra')">close</button></div>
+        <div class="modal-body" id="modal-extra-body"></div>
+        <div class="modal-actions" id="modal-extra-actions"></div>
+    </div>
+</div>
+
+<!-- ═══ 圖片工作室 ═══ -->
+<div id="image-studio" class="modal-overlay"></div>
+
+<!-- ═══ Toast ═══ -->
+<div id="toast-container"></div>
+
+<!-- ═══ 第三方函式庫 ═══ -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<!-- simple-mode：rust 等模式用 CodeMirror.defineSimpleMode 定義語法，
+     少了這支會在載入時丟 "defineSimpleMode is not a function"，該模式靜默不註冊。
+     必須排在所有 mode/*.js 之前。 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/simple.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/php/php.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/rust/rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/go/go.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/powershell/powershell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/xml-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+
+<!-- ═══ Omni Code 模組（載入順序即依賴圖）═══ -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/fsapi.js"></script>
+<script src="js/api.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/sentinel.js"></script>
+<script src="js/memory.js"></script>
+<script src="js/mcp.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/agent.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/filetree.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/terminal.js"></script>
+<script src="js/diffview.js"></script>
+<script src="js/imagestudio.js"></script>
+<script src="js/sessions.js"></script>
+<script src="js/modes.js"></script>
+<script src="js/slash.js"></script>
+<script src="js/mention.js"></script>
+<script src="js/hooks.js"></script>
+<script src="js/models.js"></script>
+<script src="js/usage.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

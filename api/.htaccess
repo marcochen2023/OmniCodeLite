@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════
+# Omni Code — api/ 存取控制
+# ═══════════════════════════════════════════════════════════════
+# 只放行 *.php 端點，其餘一律拒絕（.htaccess 自身、備份檔、暫存檔…）。
+# 真正的安全邊界是 includes/helpers.php 的 oc_guard_local()；
+# 這裡只是多一層「別把非程式檔當靜態資源送出去」的保險。
+# ═══════════════════════════════════════════════════════════════
+
+# ─── Apache 2.4 ────────────────────────────────────────────────
+<IfModule mod_authz_core.c>
+    <Files "*">
+        Require all denied
+    </Files>
+    <FilesMatch "\.php$">
+        Require all granted
+    </FilesMatch>
+</IfModule>
+
+# ─── Apache 2.2 後備 ───────────────────────────────────────────
+<IfModule !mod_authz_core.c>
+    <Files "*">
+        Order allow,deny
+        Deny from all
+    </Files>
+    <FilesMatch "\.php$">
+        Order allow,deny
+        Allow from all
+    </FilesMatch>
+</IfModule>
+
+# ─── SSE 串流：關閉所有緩衝 ────────────────────────────────────
+# relay.php 的 chat 動作是逐位元組直通的 text/event-stream，
+# 只要 PHP 輸出緩衝或 gzip 其中之一開著，前端就會等到整段結束才收到。
+<IfModule mod_php.c>
+    php_flag output_buffering off
+    php_flag zlib.output_compression off
+</IfModule>
+
+<IfModule mod_env.c>
+    SetEnv no-gzip 1
+</IfModule>

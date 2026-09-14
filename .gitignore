@@ -1,0 +1,14 @@
+# Omni Code — git 忽略規則
+
+# ─── 執行期狀態（首次啟動自動建立，不要進版控）───
+# data/ 下只有 .htaccess 是出廠檔，其餘全是跑起來後產生的：
+# config.json（可能含 Key）、sessions、shells、memory、logs、
+# comfyui（工作流註冊表＋成品圖）、selfimprove、tools、usage、vault…
+data/*
+!data/.htaccess
+
+# ─── 使用者產物（佔位 .gitkeep 保留目錄結構）───
+assets/images/*
+!assets/images/.gitkeep
+image/*
+!image/.gitkeep
